@@ -19,35 +19,34 @@ void print_help() {
               << "Outputs a name frequency table.";
 }
 
-typedef std::pair<std::string, int> namepair;
-struct IntCmp {
-    bool operator()(const namepair &lhs, const namepair &rhs) {
-        return lhs.second > rhs.second;
-    }
-};
-
 class MyCountHandler : public osmium::handler::Handler<MyCountHandler> {
 
     public:
 
     // http://stackoverflow.com/questions/5889235/boost-gil-create-image
-    boost::gil::rgb8_image_t img{360, 180};
+    boost::gil::rgb8_image_t img{2880 * 8, 1440 * 8};
     boost::gil::rgb8_pixel_t black;
     boost::gil::rgb8_pixel_t white;
+    boost::gil::rgb8_image_t::view_t v;
+    unsigned int count;
 
     MyCountHandler(const std::string& fieldname) {
-        // boost::gil::rgb8_image_t img(360 * 2, 180 * 2);
         boost::gil::rgb8_pixel_t white(255, 255, 255);
         boost::gil::rgb8_pixel_t black(0, 0, 0);
         fill_pixels(view(img), white);
+        count = 0;
     }
 
     void node(const osmium::Node& node) {
-        const char* name = node.tags().get_value_by_key("name");
-        boost::gil::rgb8_image_t::view_t v = view(img);
-        if (name) {
-            v(round(node.lon() + 180), round(node.lat() + 90)) = black;
-        }
+        // const char* name = node.tags().get_value_by_key("name");
+        // if (name) {
+            view(img)(round((node.lon() + 180) * 8 * 8), round((90 - node.lat()) * 8 * 8)) = black;
+            count++;
+            if (count % 100000000 == 0) {
+                std::cout << "count: " << count << std::endl;
+                boost::gil::png_write_view("map.png", const_view(img));
+            }
+        // }
     }
 
     void dump() {
