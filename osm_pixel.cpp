@@ -1,74 +1,65 @@
 #include <iostream>
 #include <getopt.h>
-
 #include <osmium/io/any_input.hpp>
-
 #include <osmium/io/any_output.hpp>
-
 #include <sstream>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
-
 #define png_infopp_NULL (png_infopp)NULL
 #define int_p_NULL (int*)NULL
 #include <boost/gil/gil_all.hpp>
 #include <boost/gil/extension/io/png_dynamic_io.hpp>
 
 void print_help() {
-    std::cout << "name_count INFILE\n\n" \
-              << "Outputs a name frequency table.";
+    std::cout << "osm_pixel INFILE\n\n" \
+              << "Draws every node in an OpenStreetMap Planet";
 }
 
-class MyCountHandler : public osmium::handler::Handler<MyCountHandler> {
+class DrawHandler : public osmium::handler::Handler<DrawHandler> {
 
     public:
-
-    // http://stackoverflow.com/questions/5889235/boost-gil-create-image
-    boost::gil::rgb8_image_t img{2880 * 8, 1440 * 8};
+    boost::gil::rgb8_image_t img{2880 * 4, 2880 * 4};
     boost::gil::rgb8_pixel_t black;
     boost::gil::rgb8_pixel_t white;
     boost::gil::rgb8_image_t::view_t v;
-    unsigned int count;
+    int x, y;
 
-    MyCountHandler(const std::string& fieldname) {
+    DrawHandler(const std::string& fieldname) {
         boost::gil::rgb8_pixel_t white(255, 255, 255);
         boost::gil::rgb8_pixel_t black(0, 0, 0);
         fill_pixels(view(img), white);
-        count = 0;
     }
 
     void node(const osmium::Node& node) {
-        // const char* name = node.tags().get_value_by_key("name");
-        // if (name) {
-            view(img)(round((node.lon() + 180) * 8 * 8), round((90 - node.lat()) * 8 * 8)) = black;
-            count++;
-            if (count % 100000000 == 0) {
-                std::cout << "count: " << count << std::endl;
-                boost::gil::png_write_view("map.png", const_view(img));
-            }
-        // }
+        x = floor((node.lon() + 180.0) / 360.0 * 2880.0 * 4.0);
+        y = floor(
+            (1.0 - log(
+                tan(node.lat() * M_PI / 180.0) +
+                1.0 / cos(node.lat() * M_PI / 180.0)
+            ) / M_PI) / 2.0 * 2880.0 * 4.0);
+        if (x > (2880 * 4)) x = 2880 * 4;
+        else if (x < 0) x = 0;
+        if (y > (2880 * 4)) y = 2880 * 4;
+        else if (y < 0) y = 0;
+        view(img)(x, y) = black;
     }
 
-    void dump() {
+    void saveImage() {
         boost::gil::png_write_view("map.png", const_view(img));
     }
 };
 
 int main(int argc, char* argv[]) {
     std::string input_filename;
-    std::string output_filename("ogr_out");
     int remaining_args = argc - optind;
 
-    if (remaining_args == 1) {
-        input_filename =  argv[optind];
-    } else {
-        input_filename = "-";
-    }
+    input_filename =  argv[optind];
+
     osmium::io::Reader reader(input_filename);
     osmium::io::Header header = reader.open();
-    MyCountHandler count_handler("name");
-    reader.apply(count_handler);
+
+    DrawHandler draw_handler("name");
+    reader.apply(draw_handler);
     google::protobuf::ShutdownProtobufLibrary();
     std::ostringstream buf;
-    count_handler.dump();
+
+    draw_handler.saveImage();
 }
